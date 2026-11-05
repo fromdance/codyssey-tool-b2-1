@@ -1,0 +1,8 @@
+date,type,category,amount,memo,tags
+2024-02-01,income,allowance,100000,2월 용돈,
+2024-02-03,expense,food,8000,"김밥, 라면","meal,분식"
+2024-02-05,expense,transport,1500,버스,
+2024-02-07,expense,unknown,5000,없는 카테고리,
+2024-02-30,expense,food,5000,없는 날짜,
+2024-02-09,expense,food,-100,음수,
+2024-02-10,지출,etc,2500,아이스크림,dessert
