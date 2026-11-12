@@ -23,17 +23,103 @@ Codyssey All-in-One &lt;AI 도구 학습 - B2-1> 나만의 용돈 기입장 프�
   - `id`, `type`, `date`, `amount`, `category`, `memo`, `tags`
   > models.py 의 `Transaction`
 - [x] 데이터 모델을 `dataclass`에 준하는 구조로 정의한다.
-  > `@dataclass`란, 사용자 정의 클래스에 `__init__`, `__repr__`와 같은 `보일러플레이트 메서드 자동 생성`, `프로퍼티 선언 가독성 향상 및 디폴트 값 세팅을 가능`하게해주는 데코레이터
-- [x] 최소 2개 이상의 클래스를 사용한다
-  > `models.py`: Transaction
-  > `services.py`: SearchCriteria, MonthlySummary, ImportResult, ApplyResult, BudgetService
+  > `@dataclass`란, 사용자 정의 클래스에 `__init__`, `__repr__`와 같은 `보일러플레이트 메서드 자동 생성`, `프로퍼티 선언 가독성 향상 및 디폴트 값 세팅을 가능`하게해주는 데코레이터 <br/>
+  > `models.py`의 `Transaction`, `RecurringRule`이 데이터 모델
+- [x] 최소 2개 이상의 클래스를 사용한다.
+  > `models.py`: Transaction <br/>
+  > `services.py`: SearchCriteria, MonthlySummary, ImportResult, ApplyResult, BudgetService <br />
   > `storage.py`: JsonlTable, TransactionRepository, CategoryStore, BudgetStore, RecurringStore
 - [x] 입력 검증
   > `models.py`의 `parse_*` 함수들이 입력을 검증함
 
 ## 3. 저장 정책
 - [x] 저장 포맷은 JSONL 또는 CSV 중 1개를 선택한다.
-  > 
+  > 내부적으로 사용하는 데이터들은 JSONL을 사용함 <br/>
+  > `JSONL`은 `태그`처럼 리스트로 관리해야 하는 값을 그대로 배열로 사용할 수 있고, *CSV와 달리* 숫자/문자 구분이 명확하며, 필드 추가시 예전 데이터가 깨지는 일도 없다는 장점이 있음 
+  > 외부에 가져오기/내보내기 할 때는 CSV 포맷을 사용함
+- [x] 저장 파일은 3개 이상(필수) 로 분리해 영구 저장한다.
+  > (`data/transactions.jsonl`, `categories.jsonl`, `budgets.jsonl`, `recurring.jsonl`)
+- [x] 기본 저장 폴더는 ./data를 권장하며, 옵션으로 변경 가능해야 한다(예: -data-dir).
+  > 가계부 서비스의 주요 비즈니스 로직을 처리하는 `BudgetService` 생성 시, CLI에서 인자로 받은 `data-dir`을 저장 폴더로 사용함
+  ```python
+  // cli.py > run()
+  service = BudgetService(Path(args.datadir))
+  ```
+- [x] 초기 실행시, 파일이 없으면 자동 생성하거나, “초기화 안내 메시지”를 출력해야 한다.
+    > `service.py`의 `BudgetService.initialize`에서 기본 카테고리 `store`별로 `ensure_file`(해당 `store` 경로에 폴더 및 파일가 없으면 생성)을 호출해 `자동 생성`한다.
+- 초기 실행시, 카테고리 파일이 비어있으면 아래 중 하나를 택해 동작을 명확히 한다.
+  - [x] (안 A) 기본 카테고리 자동 생성(예: food, transport, rent, etc)
+    > `BudgetService.initialize`에서 초기화 시, `DEFAULT_CATEGORIES`(`"food", "transport", "rent", "shopping", "salary", "allowance", "etc"`)으로 초기화
+## 4. `add`(거래 추가)
+- [x] 대화형으로 필드를 입력받아 거래를 저장한다.
+    > `add` 호출시 `cli.py`의 `cmd_add`가 호출되며, 이는 `input()` 기반의 입력 처리 함수 `ask`를 반복적으로 호출하는 형태다.
+- [x] `category`는 등록된 목록에 존재해야 한다.(없을시 안내 및 재입력/등록 유도)
+    > `cli.py`의 `ask_category`를 이용해 카테고리를 입력받는데, 이는 `service.categories.exists(name)`를 통해 존재하는 카테고리인지 검사하며, 존재하지 않을 경우 사용자가 입력한 카테고리를 새 카테고리로 등록할지를 질의한다.
+- [x] 저장 완료시 생성된 `id` 사용자에게 출력해야 한다.
+    > `cmd_add`에서는 저장 후, `service.add_transaction`의 반환값인 새 `Transaction`의 `id`를 출력한다.
+
+## 5. `list`(목록 조회)
+- [x] `list`는 최신순으로 거래를 출력해야 한다.
+    > `list`는 `BudgeService.latest()` 결과 값을 출력하는데, 이는 `heapq.nlargest`를 이용해 `iterable`(generator)한 `jsonl` 값 중 최신 순(`Transaction.sort_key` = (날짜, id번호)가 `높은 순`)으로 `limit`개만 출력하도록 한다.
+- [x] `--limit N` 옵션을 지원해야 한다.(기본값 제공)
+    > 마찬가지로, `heapq.nlargest`에 인자로 `N`값을 넘겨 내림차순으로 `N`개를 불러오도록 하며, `list` 명령어 등록 시 `add_argument()`를 통해 `default` 값을 20으로 등록해놓았다.
+- [x] 제너레이터 기반 스트리밍 처리로 구현해야 한다.
+    > `JSONL` 파일을 한 줄씩 읽어 `(줄 번호, dict)`를 `yield`하는 `iter_jsonl()` 함수를 사용해서 읽음
+
+## 6. `update/delete`(수정/삭제)
+- [x] `delete --id <id>`로 특정 거래를 삭제할 수 있어야 한다.
+    > `service.delete_transaction(args.tx_id)`를 호출하면, `TransactionRepository.delete(tx_id)`를 호출해 저장소로부터 특정 거래를 삭제한다.
+- [x] `존재하지 않는 id`는 "없는 데이터"로 처리하고 사용자 메시지를 출력해야 한다.
+    > `TransactionRepository.delete(tx_id)`, `TransactionRepository.update(tx_id, transform)` 모두, 존재하지 않는 id에 대해 사용자 메시지를 담은 `NotFoundError`를 일으킨다.
+- [x] `update`는 아래 중 하나의 방식으로 고정해 구현해야 한다.
+  -  (안 A) `옵션 기반`
+      > `date`, `type`, `category`, `amount`, `memo`, `tags` 옵션들을 매개변수로 받아 이를 반영한 update를 수행한다.
+
+## 7. `search`(검색)
+- [x] 조건 기반 검색을 지원해야 한다.
+    > 입력받은 `--from`, `--to`, `--category`, `--type`, `--q`, `--tag`를 `SearchCriteria`라는 `dataclass`에 담은 뒤, `BudgetService.iter_matching()`의 인자로 넘겨 매치되는 `Transaction`만 검색한다.
+- [x] 검색 결과는 최신순으로 출력해야 한다.
+    > `BudgetService.search()`에서 `limit`이 있을 경우에는 `heapq.nlargest()`으로 최신순 `N`개를 뽑아내고, 그외에는 `sorted()`로 최신순 정렬된 목록을 뽑아낸다.
+- [x] 스트리밍 처리(제너레이터 기반)를 유지해야 한다.
+    > `search`에서 조건에 맞는 `Transaction`을 필터링할 때 `제너레이터`를 반환하는 `iter_all()`을 사용해 하나씩 불러온다.
+
+## 8. `summary`(월별 요약)
+- [x] `summary --month YYYY-MM` 입력을 받아 해당 월의 요약을 출력해야 한다.
+    > `summary` 명령어가 `BudgetService.monthly_summary(args.month, args.top)`을 호출하고, `monthly_summary`는 `tx.month = args.month` 인 `Transaction`만 추려서 요약 출력한다.
+- [x] 출력 항목
+    ```bash
+    # summary --month 2024-01 --top 3
+    === 2024-01 월별 요약 ===
+    항목    |        금액
+    --------+------------
+    총 수입 | 3,000,000원
+    총 지출 |   169,500원
+    잔액    | 2,830,500
+
+    지출 TOP 3
+    순위 | 카테고리 |      지출 |  비중
+    -----+----------+-----------+------
+    1)   | rent     | 150,000원 | 88.5%
+    2)   | food     |  15,000원 |  8.8%
+    3)   | cafe     |   4,500원 |  2.7%
+
+    ```
+- [x] 데이터가 없는 달은 “데이터 없음”을 명확히 출력한다.
+    ```bash
+    # summary --month 2023-05 ; echo "exit=$?"
+    === 2023-05 월별 요약 ===
+    데이터 없음 (해당 월에 등록된 거래가 없습니다)
+
+    (예산 미설정 — `budget set --month 2023-05 --amount 금액` 으로 설정)
+    exit=0
+    ```
+
+## 9. `budget`(예산)
+
+## 10. `category`(카테고리 관리)
+
+## 11. `import/export`(가져오기/내보내기)
+
 ## 과제 목표
 
 ## 1. 실행 방법
