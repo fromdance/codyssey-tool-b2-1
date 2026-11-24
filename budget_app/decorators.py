@@ -20,8 +20,10 @@
     timed          : 실행 시간을 측정해 로그에 기록 (--verbose 면 화면에도 표시)
 """
 
+import errno
 import functools
 import logging
+import os
 import sys
 import time
 from collections.abc import Callable
@@ -70,6 +72,20 @@ def timed(func: Callable[P, R]) -> Callable[P, R]:
 
     return wrapper
 
+# 자주 나는 파일 오류별 대응 문구 (errno = OS 가 알려주는 오류 번호)
+_OS_ERROR_HINTS: dict[int, str] = {
+    errno.EACCES: "쓰기 권한이 없습니다. 폴더 권한을 확인하거나 --datadir 로 내 폴더를 지정하세요.",
+    errno.EPERM: "쓰기 권한이 없습니다. 폴더 권한을 확인하거나 --datadir 로 내 폴더를 지정하세요.",
+    errno.ENOSPC: "디스크 공간이 부족합니다. 불필요한 파일(오래된 data/backups 등)을 지우고 다시 실행하세요.",
+    errno.EROFS: "읽기 전용 위치입니다. --datadir 로 쓰기 가능한 폴더를 지정하세요.",
+    errno.ENOENT: "파일이나 폴더가 없습니다. 경로 철자를 확인하세요.",
+    errno.EISDIR: "파일 자리에 폴더 경로를 지정했습니다. 파일 이름까지 포함해 입력하세요. 예: --out ./out/jan.csv",
+    errno.ENOTDIR: "경로 중간에 폴더가 아닌 파일이 있습니다. 경로를 확인하세요.",
+}
+
+
+def os_error_hint(exc: OSError) -> str:
+    return _OS_ERROR_HINTS.get(exc.errno or 0, "경로와 쓰기 권한, 남은 디스크 공간을 확인하세요.")
 
 def handle_errors(func: Callable[P, int]) -> Callable[P, int]:
     """예외 처리 데코레이터. 감싼 함수는 종료 코드(int)를 반환해야 한다.
@@ -78,7 +94,7 @@ def handle_errors(func: Callable[P, int]) -> Callable[P, int]:
         0   : 정상
         1   : 일반 오류 (AppError, 예기치 못한 오류)
         3   : 데이터 없음 (NotFoundError)
-        4   : 저장소 오류 (StorageError)
+        4   : 저장소/파일 오류 (StorageError, OSError)
         130 : 사용자가 Ctrl+C 로 중단
     """
 
@@ -92,9 +108,15 @@ def handle_errors(func: Callable[P, int]) -> Callable[P, int]:
         except KeyboardInterrupt:
             print("\n[중단] 사용자가 작업을 취소했습니다.", file=sys.stderr)
             return 130
+        except BrokenPipeError:
+            # `list | head` 처럼 출력을 받는 쪽이 먼저 끝난 경우: 오류가 아니므로 조용히 정상 종료.
+            # 남은 출력이 종료 시점에 다시 오류를 내지 않도록 stdout 을 /dev/null 로 돌린다.
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+            return 0
         except OSError as exc:  # 권한 없음, 디스크 가득 참 등
-            print_error(f"파일 처리 중 문제가 발생했습니다: {exc.strerror} ({exc.filename})", "경로와 쓰기 권한을 확인하세요.")
-            return 1
+            logger.warning("파일 오류: %s", exc)
+            print_error(f"파일 처리 중 문제가 발생했습니다: {exc.strerror} ({exc.filename})", os_error_hint(exc))
+            return 4
         except Exception as exc:  # 예상 못 한 버그: 화면엔 요약만, 상세 스택트레이스는 로그 파일에만
             logger.exception("예기치 못한 오류")
             print_error(f"예기치 못한 오류가 발생했습니다: {type(exc).__name__}: {exc}",

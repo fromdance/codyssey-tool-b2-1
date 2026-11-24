@@ -31,7 +31,7 @@ def md5(path: Path) -> str:
 # [실험 1] 교체 직전 순간 포착: os.replace 를 가로채서 그 순간의 폴더 상태를 출력
 real_replace = os.replace
 
-def spy_replace(src, dst):
+def spy_replace(src: str, dst: str) -> None:
     show("os.replace 직전 (임시 파일과 원본이 함께 존재)")
     print(f"  원본 내용 TX-000001 amount: {first_amount()}  ← 아직 이전 값")
     real_replace(src, dst)
@@ -40,7 +40,7 @@ def first_amount():
     return next(t.amount for t in storage.TransactionRepository(tx_file).iter_all() if t.id == "TX-000001")
 
 show("update 전")
-storage.os.replace = spy_replace
+storage.os.replace = spy_replace  # type: ignore[assignment]  # 데모용 가로채기
 service.update_transaction("TX-000001", {"amount": 12345})
 storage.os.replace = real_replace
 show("update 후 (임시 파일 사라짐, inode 변경 = 새 파일로 교체됨)")

@@ -99,6 +99,8 @@ class ImportResult:
     imported: int = 0
     skipped: int = 0
     errors: list[str] = field(default_factory=list)
+    # 건너뛴 행 원본 + 사유. --skipped-out 으로 저장해 고친 뒤 그대로 다시 import 할 수 있다.
+    skipped_rows: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -261,40 +263,57 @@ class BudgetService:
         categories = set(self.categories.list_names())
         next_no = id_number(self.transactions.next_id())
 
-        # utf-8-sig: 엑셀이 저장한 CSV 맨 앞의 BOM(보이지 않는 문자)을 자동으로 제거
-        with src.open("r", encoding="utf-8-sig", newline="") as f:
-            reader = csv.DictReader(f)
-            missing = [c for c in CSV_REQUIRED if c not in (reader.fieldnames or [])]
-            if missing:
-                raise ValidationError(
-                    f"CSV 헤더에 필수 컬럼이 없습니다: {', '.join(missing)}",
-                    f"첫 줄(헤더)은 다음과 같아야 합니다: {','.join(CSV_COLUMNS)}",
-                )
-            for row in reader:  # DictReader 도 한 행씩 읽는 이터레이터
-                line = reader.line_num
-                try:
-                    category = parse_category_name(row.get("category") or "")
-                    if category not in categories:
-                        raise ValidationError(f"등록되지 않은 카테고리 '{category}'")
-                    tx = Transaction(
-                        id=format_id(TX_PREFIX, next_no),
-                        type=parse_type(row.get("type") or ""),
-                        date=parse_date(row.get("date") or ""),
-                        amount=parse_amount(row.get("amount") or ""),
-                        category=category,
-                        memo=(row.get("memo") or "").strip(),
-                        tags=parse_tags(row.get("tags") or ""),
+                # utf-8-sig: 엑셀이 저장한 CSV 맨 앞의 BOM(보이지 않는 문자)을 자동으로 제거
+        try:
+            with src.open("r", encoding="utf-8-sig", newline="") as f:
+                reader = csv.DictReader(f)
+                missing = [c for c in CSV_REQUIRED if c not in (reader.fieldnames or [])]
+                if missing:
+                    raise ValidationError(
+                        f"CSV 헤더에 필수 컬럼이 없습니다: {', '.join(missing)}",
+                        f"첫 줄(헤더)은 다음과 같아야 합니다: {','.join(CSV_COLUMNS)}",
                     )
-                except ValidationError as exc:
-                    result.skipped += 1
-                    result.errors.append(f"{line}행: {exc.message}")
-                    continue
-                valid.append(tx)
-                next_no += 1
+                for row in reader:  # DictReader 도 한 행씩 읽는 이터레이터
+                    line = reader.line_num
+                    try:
+                        category = parse_category_name(row.get("category") or "")
+                        if category not in categories:
+                            raise ValidationError(f"등록되지 않은 카테고리 '{category}'")
+                        tx = Transaction(
+                            id=format_id(TX_PREFIX, next_no),
+                            type=parse_type(row.get("type") or ""),
+                            date=parse_date(row.get("date") or ""),
+                            amount=parse_amount(row.get("amount") or ""),
+                            category=category,
+                            memo=(row.get("memo") or "").strip(),
+                            tags=parse_tags(row.get("tags") or ""),
+                        )
+                    except ValidationError as exc:
+                        result.skipped += 1
+                        result.errors.append(f"{line}행: {exc.message}")
+                        original = {col: row.get(col) or "" for col in CSV_COLUMNS}                       # ← 추가
+                        result.skipped_rows.append({**original, "error": f"{line}행: {exc.message}"})    # ← 추가
+                        continue
+                    valid.append(tx)
+                    next_no += 1
+        except UnicodeDecodeError:
+            # 엑셀의 'CSV(쉼표로 분리)' 저장은 한글을 CP949 로 저장해 이 오류가 난다
+            raise ValidationError(
+                f"{src} 파일이 UTF-8 인코딩이 아닙니다.",
+                "엑셀이라면 'CSV UTF-8(쉼표로 분리)' 형식으로 다시 저장하세요.",
+            ) from None
 
         # 유효한 행은 한 번에 저장 (중간에 파일 오류가 나도 '반쯤 들어간' 상태를 줄임)
         result.imported = self.transactions.append_many(valid)
         return result
+
+    @staticmethod
+    def write_skipped(out: Path, rows: list[dict[str, str]]) -> None:
+        """import 에서 건너뛴 행을 CSV 로 저장. 마지막 error 열은 다시 import 할 때 무시된다."""
+        with atomic_open(out) as f:
+            writer = csv.DictWriter(f, fieldnames=[*CSV_COLUMNS, "error"])
+            writer.writeheader()
+            writer.writerows(rows)
 
     def export_csv(self, out: Path, date_from: str | None, date_to: str | None) -> int:
         """조건에 맞는 거래를 날짜 오름차순으로 CSV 저장. 저장 건수 반환."""

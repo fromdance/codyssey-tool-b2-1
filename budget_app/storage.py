@@ -14,6 +14,7 @@ JSONL 을 고른 이유:
        → 쓰는 도중 프로그램이 죽어도 원본 파일은 '이전 상태' 그대로 남는다. (보너스 4)
 """
 
+import errno
 import json
 import os
 import tempfile
@@ -43,6 +44,8 @@ def atomic_open(path: Path) -> Generator[TextIO]:
         4. os.replace(임시, 원본) — OS 가 '한 번에' 바꿔치기 해 준다(원자적 연산)
         5. 도중에 예외가 나면 임시 파일만 지우고 원본은 건드리지 않는다
     """
+    if path.is_dir():  # 임시 파일 이름 대신 사용자가 입력한 경로로 오류를 알려주기 위해 미리 확인
+        raise IsADirectoryError(errno.EISDIR, "Is a directory", str(path))
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     tmp_path = Path(tmp_name)

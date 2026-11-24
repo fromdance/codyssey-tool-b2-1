@@ -18,7 +18,7 @@ import logging
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import NoReturn, TypeVar
+from typing import Any, NoReturn, TypeVar
 
 from . import __version__
 from .decorators import handle_errors, log_execution, timed
@@ -134,9 +134,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", metavar="<command>", required=True)
 
-    def add_cmd(subparsers: argparse._SubParsersAction, name: str, help_text: str,
+    def add_cmd(subparsers: "argparse._SubParsersAction[Any]", name: str, help_text: str,
                 handler: Callable[[BudgetService, argparse.Namespace], None] | None) -> argparse.ArgumentParser:
-        p = subparsers.add_parser(name, help=help_text, description=help_text, parents=[common])
+        p: argparse.ArgumentParser = subparsers.add_parser(name, help=help_text, description=help_text, parents=[common])
         if handler is not None:
             p.set_defaults(handler=handler)
         return p
@@ -206,6 +206,8 @@ def build_parser() -> argparse.ArgumentParser:
     # --- import / export -------------------------------------------------
     p = add_cmd(sub, "import", f"CSV 가져오기 (컬럼: {','.join(CSV_COLUMNS)})", cmd_import)
     p.add_argument("--from", dest="src", type=Path, required=True, metavar="CSV경로")
+    p.add_argument("--skipped-out", dest="skipped_out", type=Path, metavar="CSV경로",
+                   help="건너뛴 행을 사유(error 열)와 함께 저장할 CSV 경로")
 
     p = add_cmd(sub, "export", "CSV 내보내기 (--month 또는 --from/--to 필수)", cmd_export)
     p.add_argument("--out", type=Path, required=True, metavar="CSV경로")
@@ -393,6 +395,11 @@ def cmd_import(service: BudgetService, args: argparse.Namespace) -> None:
     if len(result.errors) > 20:
         print(f"  ... 외 {len(result.errors) - 20}건")
     print(f"[완료] imported={result.imported}, skipped={result.skipped}")
+    if result.skipped_rows and args.skipped_out:
+        service.write_skipped(args.skipped_out, result.skipped_rows)
+        print(f"[안내] 건너뛴 {result.skipped}행을 {args.skipped_out} 에 저장했습니다. 고친 뒤 다시 import 하세요.")
+    elif result.skipped_rows:
+        print("[힌트] --skipped-out <경로> 를 붙이면 건너뛴 행만 CSV 로 저장해 고친 뒤 다시 가져올 수 있습니다.")
 
 
 @log_execution
