@@ -17,6 +17,9 @@ Align = str  # "left" | "right"
 
 def display_width(text: str) -> int:
     """터미널에서 차지하는 실제 칸 수."""
+    # 문자열에서 한 글자(ch)씩 꺼내, 동아시아 너비(East Asian Width)를 확인한다.
+    # 한글/한자는 "W"를, 전각 영문/기호는 "F"를 반환한다.
+    # 너비 속성이 W(전각/넓음), F(전각 호환)이면 2칸으로 계산, 그 외에는 1칸으로 계산
     return sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in text)
 
 

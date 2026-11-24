@@ -6,6 +6,16 @@ Codyssey All-in-One &lt;AI 도구 학습 - B2-1> 나만의 용돈 기입장 프�
 - 파일 기반 콘솔 가계부로, 표준 라이브러리만 사용하며 `Python 3.10` 이상에서 동작합니다.
 (제너레이터 스트리밍 / 데코레이터 / 타입 힌트 / 원자적 저장 / 모듈 분리 적용)
 
+## 시동 코드
+```bash
+docker run --rm -it -v "$PWD":/app -w /app -e TZ=KST-9 python:3.10-slim bash # 시작
+# `-v "$PWD":/app:` 호스트의 현재 작업 디렉토리($PWD)를 컨테이너 내부의 /app 경로에 바인드 마운트함. 컨테이너 안에서 수정한 파일이 로컬에도 그대로 반영됨
+# `-w /app`: 컨테이너가 시작될 때 기본 작업 디렉토리(Working Directory)를 /app으로 설정
+
+rm -rf tc tc2 out                                   # 테스트용 폴더 초기화
+alias b='python -m budget_app --datadir ./tc'       # 실제 data 폴더와 분리
+```
+
 ## 기능 요구 사항
 
 ### 1. 실행 및 입력 방식
@@ -137,13 +147,13 @@ Codyssey All-in-One &lt;AI 도구 학습 - B2-1> 나만의 용돈 기입장 프�
 - [x] `category add/list/remove`를 제공해야 한다.
   ```bash
   # category add
-  root@1b9f4d31623d:/app# b category add # 대화형
+  root@1b9f4d31623d:/app$ b category add # 대화형
   카테고리명: conv 
   [저장 완료] category=conv
-  root@1b9f4d31623d:/app# b category add --name food
+  root@1b9f4d31623d:/app$ b category add --name food
   [안내] 이미 등록된 카테고리입니다: food
   # category list
-  root@1b9f4d31623d:/app# b category list
+  root@1b9f4d31623d:/app$ b category list
   - food
   - transport
   - rent
@@ -153,17 +163,17 @@ Codyssey All-in-One &lt;AI 도구 학습 - B2-1> 나만의 용돈 기입장 프�
   - etc
   - conv
   # category remove
-  root@1b9f4d31623d:/app# b category remove # 대화형
+  root@1b9f4d31623d:/app$ b category remove # 대화형
   삭제할 카테고리명: rent
   [삭제 완료] category=rent
-  root@1b9f4d31623d:/app# b category remove --name cafe ; echo "exit=$?"
+  root@1b9f4d31623d:/app$ b category remove --name cafe ; echo "exit=$?"
   [오류] 'cafe' 카테고리가 없습니다.
   [힌트] `category list` 로 목록을 확인하세요.
   exit=3
   # category remove --replace-with another_category
-  root@1b9f4d31623d:/app# b category add --name=cafe
+  root@1b9f4d31623d:/app$ b category add --name=cafe
   [저장 완료] category=cafe
-  root@1b9f4d31623d:/app# b add
+  root@1b9f4d31623d:/app$ b add
   날짜(YYYY-MM-DD, 엔터=오늘 2026-11-24): 2024-01-12
   타입(income/expense): expense
   카테고리: cafe
@@ -171,10 +181,10 @@ Codyssey All-in-One &lt;AI 도구 학습 - B2-1> 나만의 용돈 기입장 프�
   메모(선택): 
   태그(쉼표로 구분, 없으면 엔터): 
   [저장 완료] id=TX-000001
-  root@1b9f4d31623d:/app# b category remove --name cafe --replace-with food
+  root@1b9f4d31623d:/app$ b category remove --name cafe --replace-with food
   [이동 완료] 거래 1건을 'food' 로 옮겼습니다.
   [삭제 완료] category=cafe
-  root@1b9f4d31623d:/app# b search --category food
+  root@1b9f4d31623d:/app$ b search --category food
   ID        | 날짜       | 타입    | 카테고리 |   금액 | 메모 | 태그
   ----------+------------+---------+----------+--------+------+-----
   TX-000001 | 2024-01-12 | expense | food     | 50,000 |      |
@@ -182,7 +192,7 @@ Codyssey All-in-One &lt;AI 도구 학습 - B2-1> 나만의 용돈 기입장 프�
 - [x] 카테고리 삭제 시, 해당 카테고리를 사용하는 내역이 존재하면 삭제를 막거나, 대체 카테고리를 요구해야 한다.
   ```bash
   # 사용중인 카테고리는 삭제를 막고, 대체 카테고리를 지정하도록 유도함.
-  root@1b9f4d31623d:/app# b category remove --name food
+  root@1b9f4d31623d:/app$ b category remove --name food
   [오류] 'food' 카테고리를 사용하는 거래 1건, 반복 규칙 0건이 있어 삭제할 수 없습니다.
   [힌트] --replace-with <대체카테고리> 옵션으로 옮길 카테고리를 지정하세요.
   ```
@@ -190,7 +200,7 @@ Codyssey All-in-One &lt;AI 도구 학습 - B2-1> 나만의 용돈 기입장 프�
 ## 11. `import/export`(가져오기/내보내기)
 - [x] `import --from \`로 거래를 일괄 등록한다.
   ```bash
-  root@1b9f4d31623d:/app# b import --from examples/import_sample.csv
+  root@1b9f4d31623d:/app$ b import --from examples/import_sample.csv
   [건너뜀] 5행: 등록되지 않은 카테고리 'unknown'
   [건너뜀] 6행: 날짜 형식이 올바르지 않습니다 (YYYY-MM-DD).
   [건너뜀] 7행: 금액은 양의 정수여야 합니다: '-100'
@@ -199,7 +209,7 @@ Codyssey All-in-One &lt;AI 도구 학습 - B2-1> 나만의 용돈 기입장 프�
 - [x] `export --out \`로 조건에 맞는 거래를 CSV로 저장한다.
   ```bash
   # 2024-02에 발생한 거래들을 모두 내보낸다.
-  root@1b9f4d31623d:/app# b export --out out/feb.csv --month 2024-02 ; cat out/feb.csv
+  root@1b9f4d31623d:/app$ b export --out out/feb.csv --month 2024-02 ; cat out/feb.csv
   [완료] out/feb.csv (4 records)
   date,type,category,amount,memo,tags
   2024-02-01,income,allowance,100000,2월 용돈,
@@ -207,7 +217,7 @@ Codyssey All-in-One &lt;AI 도구 학습 - B2-1> 나만의 용돈 기입장 프�
   2024-02-05,expense,transport,1500,버스,
   2024-02-10,expense,etc,2500,아이스크림,dessert
   # 2024-01-01 ~ 2024-01-31 사이에 발생한 거래들을 모두 내보낸다.
-  root@1b9f4d31623d:/app# b export --out out/jan.csv --from 2024-01-01 --to 2024-01-31
+  root@1b9f4d31623d:/app$ b export --out out/jan.csv --from 2024-01-01 --to 2024-01-31
   [완료] out/jan.csv (1 records)
   ```
 - [x] `export`는 `--month YYYY-MM` 또는 `--from YYYY-MM-DD --to YYYY-MM-DD` 중 하나 이상 조건을 필수로 받는다.
@@ -232,13 +242,13 @@ Codyssey All-in-One &lt;AI 도구 학습 - B2-1> 나만의 용돈 기입장 프�
     - [x] `backup` 실행 시 타임스탬프가 포함된 백업 파일을 생성한다.
       ```bash
       # 백업 생성
-      root@1b9f4d31623d:/app# b backup
+      root@1b9f4d31623d:/app$ b backup
       [백업 완료] tc/backups/backup-20261124-153545
       # 백업 목록 조회
-      root@1b9f4d31623d:/app# b backup list
+      root@1b9f4d31623d:/app$ b backup list
       - backup-20261124-153545
       # 백업 파일 이용해 복원
-      root@1b9f4d31623d:/app# b backup restore --name backup-20261124-153545
+      root@1b9f4d31623d:/app$ b backup restore --name backup-20261124-153545
       [복원 완료] backup-20261124-153545
       [안내] 복원 직전 상태는 backup-20261124-153825-before-restore 에 백업해 두었습니다.
       ```
@@ -246,7 +256,7 @@ Codyssey All-in-One &lt;AI 도구 학습 - B2-1> 나만의 용돈 기입장 프�
     - [x] 월급/월세처럼 반복되는 내역을 등록하고, 특정 월에 자동 생성한다.
       ```bash
       # 반복 내역 등록
-      root@1b9f4d31623d:/app# b recurring add # 기본은 대화형
+      root@1b9f4d31623d:/app/$ b recurring add # 기본은 대화형
       규칙 이름(예: 월급): 월급 
       타입(income/expense): income
       카테고리: salary
@@ -255,13 +265,40 @@ Codyssey All-in-One &lt;AI 도구 학습 - B2-1> 나만의 용돈 기입장 프�
       메모(선택, 엔터=규칙 이름): 
       태그(쉼표로 구분, 없으면 엔터): 
       [저장 완료] id=RC-000001 (매월 25일 salary 3,000,000원)
+      # 반복 내역 조회
+      root@8ccb229addb4:/app$ b recurring list
+      ID        | 이름 | 타입    | 카테고리 |      금액 | 주기
+      ----------+------+---------+----------+-----------+----------
+      RC-000001 | 월급 | income  | salary   | 3,000,000 | 매월 25일
+      RC-000002 | 월세 | expense | rent     |   500,000 | 매월 31일
+      # 반복 내역 중복 생성 방지
+      root@8ccb229addb4:/app$ b recurring apply --month 2024-02
+        [생성] TX-000001 2024-02-25 salary 3,000,000원 (월급)
+        [생성] TX-000002 2024-02-29 rent 500,000원 (월세)
+      [완료] created=2, skipped=0
+      root@8ccb229addb4:/app$ b recurring apply --month 2024-02
+        [건너뜀] RC-000001 월급: 이미 2024-02에 생성됨
+        [건너뜀] RC-000002 월세: 이미 2024-02에 생성됨
+      [완료] created=0, skipped=2
+      # 반복 내역 삭제
+      root@8ccb229addb4:/app$ b recurring remove --id RC-000001
+      [삭제 완료] id=RC-000001 (월급)
       ```
 3. 출력 포맷 테이블 정렬
-    - 외부 라이브러리 없이 문자열 정렬로 가독성을 개선한다.
-    - 배움 포인트: 콘솔 UX + 포맷터 분리
+    - [x] 외부 라이브러리 없이 문자열 정렬로 가독성을 개선한다.
+      > formatter.py에 있는 유틸리티 함수들(`render_table`, `money` 등)을 활용해 테이블 포맷으로 출력한다.  
+      > `unicodedata.east_asian_width()`를 이용해 한글과 같은 2칸 문자와 영문과 같은 1칸 문자를 보정하여,  
+      > 문자열은 좌측, 숫자(금액)는 우측 정렬로 가독성을 개선함.  
+      > (python에서 기본 제공하는 `ljust`, `rjust`를 사용해 정렬할 경우 한글/영문의 칸 수 차이로 인해 밀림이 발생)
+      ```bash
+      print("사과".ljust(10) + "|")
+      사과        |
+      print("apple".ljust(10) + "|")
+      apple     |
+      ```
 4. 저장 원자성 강화
-    - pdate/delete 시 임시 파일에 쓰고 rename으로 교체하는 방식을 적용한다.
-    - 배움 포인트: 파일 기반 트랜잭션/원자성 사고
+    - [x] `update`/`delete` 시 임시 파일에 쓰고 `rename`으로 교체하는 방식을 적용한다.
+      > `update`와 `delete` 모두 `TransactionRepository.rewrite`라는 함수를 호출하는데, 이는 `frozen dataclass`인 `Transaction`을 일부 수정하는것이 아닌, 일부 데이터가 수정된 새 객체를 만들어 원본 객체를 대신하는 형태이다.  
 ## 과제 목표
 
 ## 1. 실행 방법
