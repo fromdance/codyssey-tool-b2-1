@@ -115,11 +115,153 @@ Codyssey All-in-One &lt;AI 도구 학습 - B2-1> 나만의 용돈 기입장 프�
     ```
 
 ## 9. `budget`(예산)
+- [x] `budget set --month YYYY-MM --amount <금액>`으로 월 예산을 저장해야 한다.
+  ```bash
+  # budget set --month 2024-01 --amount 500000
+  [저장 완료] 2024-01 예산 500,000
+  ```
+- [x] `summary` 실행 시 예산이 설정되어 있으면 `예산 대비 사용률(%)`, `초과 여부(초과 시 경고 문구)` 를 함께 출력해야 한다.
+  ```bash
+  # budget set --month 2024-01 --amount 500000
+  # summary --month 2024-01 --top 3
+  === 2024-01 월별 요약 ===
+  데이터 없음 (해당 월에 등록된 거래가 없습니다)
+
+  예산: 500,000원 (사용률 0.0%) [--------------------]
+  남은 예산: 500,000원
+  ```
+- [x] 예산 데이터도 반드시 영구 저장되어야 한다.
+  > `datadir/budgets.jsonl`에 저장된다. `budget set` 명령어가 궁극적으로 `BudgetStore.set()`을 호출하게 되는데, 이때 `self.save()를 통해 실제 파일로 쓴다.
 
 ## 10. `category`(카테고리 관리)
+- [x] `category add/list/remove`를 제공해야 한다.
+  ```bash
+  # category add
+  root@1b9f4d31623d:/app# b category add # 대화형
+  카테고리명: conv 
+  [저장 완료] category=conv
+  root@1b9f4d31623d:/app# b category add --name food
+  [안내] 이미 등록된 카테고리입니다: food
+  # category list
+  root@1b9f4d31623d:/app# b category list
+  - food
+  - transport
+  - rent
+  - shopping
+  - salary
+  - allowance
+  - etc
+  - conv
+  # category remove
+  root@1b9f4d31623d:/app# b category remove # 대화형
+  삭제할 카테고리명: rent
+  [삭제 완료] category=rent
+  root@1b9f4d31623d:/app# b category remove --name cafe ; echo "exit=$?"
+  [오류] 'cafe' 카테고리가 없습니다.
+  [힌트] `category list` 로 목록을 확인하세요.
+  exit=3
+  # category remove --replace-with another_category
+  root@1b9f4d31623d:/app# b category add --name=cafe
+  [저장 완료] category=cafe
+  root@1b9f4d31623d:/app# b add
+  날짜(YYYY-MM-DD, 엔터=오늘 2026-11-24): 2024-01-12
+  타입(income/expense): expense
+  카테고리: cafe
+  금액(양수): 50000
+  메모(선택): 
+  태그(쉼표로 구분, 없으면 엔터): 
+  [저장 완료] id=TX-000001
+  root@1b9f4d31623d:/app# b category remove --name cafe --replace-with food
+  [이동 완료] 거래 1건을 'food' 로 옮겼습니다.
+  [삭제 완료] category=cafe
+  root@1b9f4d31623d:/app# b search --category food
+  ID        | 날짜       | 타입    | 카테고리 |   금액 | 메모 | 태그
+  ----------+------------+---------+----------+--------+------+-----
+  TX-000001 | 2024-01-12 | expense | food     | 50,000 |      |
+  ```
+- [x] 카테고리 삭제 시, 해당 카테고리를 사용하는 내역이 존재하면 삭제를 막거나, 대체 카테고리를 요구해야 한다.
+  ```bash
+  # 사용중인 카테고리는 삭제를 막고, 대체 카테고리를 지정하도록 유도함.
+  root@1b9f4d31623d:/app# b category remove --name food
+  [오류] 'food' 카테고리를 사용하는 거래 1건, 반복 규칙 0건이 있어 삭제할 수 없습니다.
+  [힌트] --replace-with <대체카테고리> 옵션으로 옮길 카테고리를 지정하세요.
+  ```
 
 ## 11. `import/export`(가져오기/내보내기)
+- [x] `import --from \`로 거래를 일괄 등록한다.
+  ```bash
+  root@1b9f4d31623d:/app# b import --from examples/import_sample.csv
+  [건너뜀] 5행: 등록되지 않은 카테고리 'unknown'
+  [건너뜀] 6행: 날짜 형식이 올바르지 않습니다 (YYYY-MM-DD).
+  [건너뜀] 7행: 금액은 양의 정수여야 합니다: '-100'
+  [완료] imported=4, skipped=3
+  ```
+- [x] `export --out \`로 조건에 맞는 거래를 CSV로 저장한다.
+  ```bash
+  # 2024-02에 발생한 거래들을 모두 내보낸다.
+  root@1b9f4d31623d:/app# b export --out out/feb.csv --month 2024-02 ; cat out/feb.csv
+  [완료] out/feb.csv (4 records)
+  date,type,category,amount,memo,tags
+  2024-02-01,income,allowance,100000,2월 용돈,
+  2024-02-03,expense,food,8000,"김밥, 라면","meal,분식"
+  2024-02-05,expense,transport,1500,버스,
+  2024-02-10,expense,etc,2500,아이스크림,dessert
+  # 2024-01-01 ~ 2024-01-31 사이에 발생한 거래들을 모두 내보낸다.
+  root@1b9f4d31623d:/app# b export --out out/jan.csv --from 2024-01-01 --to 2024-01-31
+  [완료] out/jan.csv (1 records)
+  ```
+- [x] `export`는 `--month YYYY-MM` 또는 `--from YYYY-MM-DD --to YYYY-MM-DD` 중 하나 이상 조건을 필수로 받는다.
+  > 인자로 `--month` 또는 `--from, --to`가 주어지지 않을 경우, 이를 처리하는 `resolve_period(cli.py)` 함수에서 `ValidationError`를 발생시킨다.
+- [x] `import/export`는 아래 CSV 최소 스키마를 고정한다.
+  ```bash
+  | column | required | 설명 |
+  | --- | --- | --- |
+  | date | Y | YYYY-MM-DD |
+  | type | Y | income / expense |
+  | category | Y | 등록된 카테고리 |
+  | amount | Y | 양수 정수 |
+  | memo | N | 문자열 |
+  | tags | N | 쉼표(,) 구분 문자열 |
+  | 공통: UTF-8, 헤더 포함 |   |   |
+  ```
+  > `export`시에는, csv 최상단에 `CSV_COLUMNS`(`tuple[str,...]: ("date", "type", "category", "amount", "memo", "tags")`)를 먼저 기입해 스키마를 고정시킨다.
+  > `import`시에는, 매 row 데이터(`dict 타입`)를 사용해 `Transaction`을 생성하므로써 스키마를 고정시킨다.
 
+## 보너스
+1. 백업 기능
+    - [x] `backup` 실행 시 타임스탬프가 포함된 백업 파일을 생성한다.
+      ```bash
+      # 백업 생성
+      root@1b9f4d31623d:/app# b backup
+      [백업 완료] tc/backups/backup-20261124-153545
+      # 백업 목록 조회
+      root@1b9f4d31623d:/app# b backup list
+      - backup-20261124-153545
+      # 백업 파일 이용해 복원
+      root@1b9f4d31623d:/app# b backup restore --name backup-20261124-153545
+      [복원 완료] backup-20261124-153545
+      [안내] 복원 직전 상태는 backup-20261124-153825-before-restore 에 백업해 두었습니다.
+      ```
+2. 반복 내역 기능
+    - [x] 월급/월세처럼 반복되는 내역을 등록하고, 특정 월에 자동 생성한다.
+      ```bash
+      # 반복 내역 등록
+      root@1b9f4d31623d:/app# b recurring add # 기본은 대화형
+      규칙 이름(예: 월급): 월급 
+      타입(income/expense): income
+      카테고리: salary
+      금액(양수): 3000000
+      매월 며칠(1~31): 25
+      메모(선택, 엔터=규칙 이름): 
+      태그(쉼표로 구분, 없으면 엔터): 
+      [저장 완료] id=RC-000001 (매월 25일 salary 3,000,000원)
+      ```
+3. 출력 포맷 테이블 정렬
+    - 외부 라이브러리 없이 문자열 정렬로 가독성을 개선한다.
+    - 배움 포인트: 콘솔 UX + 포맷터 분리
+4. 저장 원자성 강화
+    - pdate/delete 시 임시 파일에 쓰고 rename으로 교체하는 방식을 적용한다.
+    - 배움 포인트: 파일 기반 트랜잭션/원자성 사고
 ## 과제 목표
 
 ## 1. 실행 방법
